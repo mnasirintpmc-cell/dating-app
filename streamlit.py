@@ -1,7 +1,10 @@
 import streamlit as st
 import numpy as np
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageOps
 
+# -------------------------------------------------
+# App config
+# -------------------------------------------------
 st.set_page_config(
     page_title="SymmetryMatch",
     page_icon="🔥",
@@ -9,13 +12,26 @@ st.set_page_config(
 )
 
 st.title("SymmetryMatch")
-st.caption("Experimental facial attractiveness model (non-egalitarian)")
+st.caption("Experimental facial attractiveness model based on structure")
 
-# -----------------------------
-# Core feature extractors
-# -----------------------------
+# -------------------------------------------------
+# Preprocessing
+# -------------------------------------------------
+def preprocess_face(image):
+    """
+    Center-crop to reduce background and hair influence.
+    """
+    w, h = image.size
+    size = int(min(w, h) * 0.85)
+    left = (w - size) // 2
+    top = (h - size) // 2
+    return image.crop((left, top, left + size, top + size))
 
-def image_symmetry(image):
+
+# -------------------------------------------------
+# Feature extractors
+# -------------------------------------------------
+def symmetry_score(image):
     gray = ImageOps.grayscale(image)
     img = np.array(gray).astype(np.float32)
 
@@ -23,124 +39,85 @@ def image_symmetry(image):
     mid = w // 2
 
     left = img[:, :mid]
-    right = img[:, w - mid:]
-    right = np.fliplr(right)
+    right = np.fliplr(img[:, w - mid:])
 
     return np.mean(np.abs(left - right))
 
 
-def face_ratio(image):
+def face_ratio_score(image):
     """
     Proxy for facial width-to-height ratio.
-    Wider / compact faces score higher.
+    Western attractiveness peak ~0.72–0.78
     """
-    gray = ImageOps.grayscale(image)
-    img = np.array(gray)
-
-    h, w = img.shape
-    return w / h
+    w, h = image.size
+    ratio = w / h
+    return max(0.0, 1.0 - abs(ratio - 0.75) / 0.25)
 
 
-def jawline_strength(image):
-    """
-    Edge density in lower third of face.
-    Strong jawlines produce strong edges.
-    """
-    gray = ImageOps.grayscale(image)
-    edges = gray.filter(ImageFilter.FIND_EDGES)
-    arr = np.array(edges).astype(np.float32)
-
-    h, _ = arr.shape
-    jaw_region = arr[int(h * 0.65):h, :]
-
-    return np.mean(jaw_region)
-
-
-def contrast_score(image):
-    """
-    High contrast faces tend to be rated more attractive.
-    """
-    gray = ImageOps.grayscale(image)
-    arr = np.array(gray).astype(np.float32)
-    return np.std(arr)
-
-
-# -----------------------------
-# Scoring logic (HARSH)
-# -----------------------------
-
-def normalize(val, min_v, max_v):
-    return max(0, min(1, (val - min_v) / (max_v - min_v)))
-
-
+# -------------------------------------------------
+# Final attractiveness model (HARSH, STRUCTURAL)
+# -------------------------------------------------
 def attractiveness_score(image):
-    sym = image_symmetry(image)
-    ratio = face_ratio(image)
-    jaw = jawline_strength(image)
-    contrast = contrast_score(image)
+    image = preprocess_face(image)
 
-    # Normalize aggressively (empirical ranges)
-    sym_n = 1 - normalize(sym, 5, 40)
-    ratio_n = normalize(ratio, 0.6, 0.85)
-    jaw_n = normalize(jaw, 8, 35)
-    contrast_n = normalize(contrast, 40, 80)
+    sym = symmetry_score(image)
+    ratio = face_ratio_score(image)
 
-    # Weighted like humans actually judge
+    # Normalize symmetry aggressively
+    sym_n = max(0.0, 1.0 - sym / 28.0)
+
+    # Weighted like human judgment
     score = (
-        sym_n * 0.30 +
-        jaw_n * 0.30 +
-        ratio_n * 0.25 +
-        contrast_n * 0.15
+        sym_n * 0.65 +
+        ratio * 0.35
     )
 
     return round(score * 100, 1)
 
 
-# -----------------------------
+# -------------------------------------------------
 # Demo matching pool
-# -----------------------------
-
-USER_DB = {
+# -------------------------------------------------
+USER_DATABASE = {
     "Alex": 81.0,
-    "Jamie": 76.5,
-    "Sam": 88.2,
-    "Morgan": 83.7,
-    "Taylor": 62.4,
-    "Jordan": 79.1
+    "Jamie": 77.5,
+    "Sam": 88.0,
+    "Morgan": 84.2,
+    "Taylor": 63.1,
+    "Jordan": 79.3
 }
 
-# -----------------------------
+# -------------------------------------------------
 # UI
-# -----------------------------
-
-uploaded = st.file_uploader(
-    "Upload a clear, front-facing face (neutral expression)",
+# -------------------------------------------------
+uploaded_file = st.file_uploader(
+    "Upload a clear, front-facing face photo",
     type=["jpg", "jpeg", "png"]
 )
 
-if uploaded:
-    image = Image.open(uploaded).convert("RGB")
+if uploaded_file:
+    image = Image.open(uploaded_file).convert("RGB")
     st.image(image, width=300)
 
     with st.spinner("Analyzing facial structure..."):
         score = attractiveness_score(image)
 
-    st.success(f"Attractiveness score: **{score} / 100**")
+    st.success(f"Attractiveness score: {score} / 100")
 
     st.subheader("Matches (similar tier)")
     matches = {
-        name: s for name, s in USER_DB.items()
+        name: s for name, s in USER_DATABASE.items()
         if abs(s - score) <= 4
     }
 
     if matches:
         for name, s in matches.items():
-            st.write(f"{name} — {s}")
+            st.write(f"{name} - {s}")
     else:
         st.write("No close matches found.")
 
 st.markdown("---")
 st.caption(
-    "This model reflects common Western beauty standards "
-    "and is intentionally not egalitarian."
+    "This model reflects common Western facial structure standards. "
+    "It is experimental and intentionally non-egalitarian."
 )
