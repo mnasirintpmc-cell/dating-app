@@ -1,86 +1,46 @@
-import streamlit as st
-import mediapipe as mp
-import numpy as np
-from PIL import Image
+# 💘 SymmetryMatch
 
-st.set_page_config(
-    page_title="SymmetryMatch",
-    page_icon="💘",
-    layout="centered"
-)
+SymmetryMatch is an experimental dating app prototype built with Streamlit.
+It estimates facial symmetry from a user-uploaded image and matches users with
+others who have similar symmetry scores.
 
-st.title("💘 SymmetryMatch")
-st.caption("Experimental dating app using facial symmetry")
+This project is for educational and exploratory purposes only.
 
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(
-    static_image_mode=True,
-    max_num_faces=1,
-    refine_landmarks=True
-)
+---
 
-def extract_landmarks(image_np):
-    h, w, _ = image_np.shape
-    results = face_mesh.process(image_np)
-    if not results.multi_face_landmarks:
-        return None, None
-    landmarks = [
-        (lm.x * w, lm.y * h)
-        for lm in results.multi_face_landmarks[0].landmark
-    ]
-    return landmarks, w
+## Features
 
-def symmetry_raw_score(landmarks, width):
-    mid_x = width / 2
-    return np.mean([abs((2 * mid_x - x) - x) for x, _ in landmarks])
+- Image-based symmetry analysis
+- 0–100 normalized symmetry score
+- Matching with users of similar scores
+- No data storage
+- No external services
 
-def normalize(score):
-    return round(max(0, min(100 - score * 100, 100)), 1)
+---
 
-USER_DB = {
-    "Alex": 82.3,
-    "Jamie": 79.9,
-    "Sam": 85.1,
-    "Morgan": 83.0,
-    "Taylor": 60.4,
-    "Jordan": 77.2
-}
+## Tech Stack
 
-uploaded = st.file_uploader(
-    "Upload a clear, front-facing photo",
-    type=["jpg", "jpeg", "png"]
-)
+- Python
+- Streamlit
+- NumPy
+- Pillow
 
-if uploaded:
-    image = Image.open(uploaded).convert("RGB")
-    img_np = np.array(image)
-    st.image(image, width=300)
+---
 
-    with st.spinner("Analyzing facial symmetry..."):
-        landmarks, width = extract_landmarks(img_np)
+## Privacy
 
-    if landmarks is None:
-        st.error("No face detected. Try another image.")
-    else:
-        raw = symmetry_raw_score(landmarks, width)
-        score = normalize(raw)
+- Images are processed in memory only
+- No images or personal data are stored
 
-        st.success(f"✨ Your Facial Symmetry Score: **{score}/100**")
+---
 
-        st.subheader("💞 Potential Matches")
-        matches = {
-            name: s for name, s in USER_DB.items()
-            if abs(s - score) <= 3
-        }
+## Disclaimer
 
-        if matches:
-            for name, s in matches.items():
-                st.write(f"**{name}** — Symmetry {s}/100")
-        else:
-            st.write("No close matches yet.")
+Facial symmetry is only one small factor in attraction.
+This app does not measure beauty or personal value.
 
-st.markdown("---")
-st.caption(
-    "⚠️ This app is experimental. Facial symmetry is only one small factor "
-    "in human attraction."
-)
+---
+
+## License
+
+MIT License
