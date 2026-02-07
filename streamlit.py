@@ -1,12 +1,8 @@
 import streamlit as st
-import cv2
 import mediapipe as mp
 import numpy as np
 from PIL import Image
 
-# -------------------------------------------------
-# Streamlit Config
-# -------------------------------------------------
 st.set_page_config(
     page_title="SymmetryMatch",
     page_icon="💘",
@@ -16,9 +12,6 @@ st.set_page_config(
 st.title("💘 SymmetryMatch")
 st.caption("Experimental dating app using facial symmetry")
 
-# -------------------------------------------------
-# MediaPipe Setup
-# -------------------------------------------------
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(
     static_image_mode=True,
@@ -26,110 +19,68 @@ face_mesh = mp_face_mesh.FaceMesh(
     refine_landmarks=True
 )
 
-# -------------------------------------------------
-# Utility Functions
-# -------------------------------------------------
 def extract_landmarks(image_np):
-    """Detect facial landmarks and return pixel coordinates"""
     h, w, _ = image_np.shape
     results = face_mesh.process(image_np)
-
     if not results.multi_face_landmarks:
         return None, None
-
-    landmarks = []
-    for lm in results.multi_face_landmarks[0].landmark:
-        landmarks.append((lm.x * w, lm.y * h))
-
+    landmarks = [
+        (lm.x * w, lm.y * h)
+        for lm in results.multi_face_landmarks[0].landmark
+    ]
     return landmarks, w
 
-
-def calculate_symmetry_score(landmarks, width):
-    """
-    Calculate facial symmetry by mirroring x-coordinates
-    Lower distance = higher symmetry
-    """
+def symmetry_raw_score(landmarks, width):
     mid_x = width / 2
-    diffs = []
+    return np.mean([abs((2 * mid_x - x) - x) for x, _ in landmarks])
 
-    for x, y in landmarks:
-        mirrored_x = 2 * mid_x - x
-        diffs.append(abs(mirrored_x - x))
+def normalize(score):
+    return round(max(0, min(100 - score * 100, 100)), 1)
 
-    return np.mean(diffs)
-
-
-def normalize_score(raw_score):
-    """
-    Convert raw symmetry into a 0–100 attractiveness score
-    """
-    score = 100 - (raw_score * 100)
-    return round(max(0, min(score, 100)), 1)
-
-
-def find_matches(user_score, database, tolerance=3):
-    """Find users with similar symmetry scores"""
-    return {
-        name: score
-        for name, score in database.items()
-        if abs(score - user_score) <= tolerance
-    }
-
-# -------------------------------------------------
-# Fake User Database (replace later with DB)
-# -------------------------------------------------
-USER_DATABASE = {
-    "Alex": 82.4,
-    "Jamie": 79.8,
+USER_DB = {
+    "Alex": 82.3,
+    "Jamie": 79.9,
     "Sam": 85.1,
-    "Taylor": 60.5,
-    "Morgan": 83.2,
-    "Jordan": 77.0
+    "Morgan": 83.0,
+    "Taylor": 60.4,
+    "Jordan": 77.2
 }
 
-# -------------------------------------------------
-# UI
-# -------------------------------------------------
-uploaded_file = st.file_uploader(
+uploaded = st.file_uploader(
     "Upload a clear, front-facing photo",
     type=["jpg", "jpeg", "png"]
 )
 
-if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-    image_np = np.array(image)
-
-    st.image(image, caption="Uploaded Image", width=300)
+if uploaded:
+    image = Image.open(uploaded).convert("RGB")
+    img_np = np.array(image)
+    st.image(image, width=300)
 
     with st.spinner("Analyzing facial symmetry..."):
-        landmarks, width = extract_landmarks(image_np)
+        landmarks, width = extract_landmarks(img_np)
 
     if landmarks is None:
-        st.error("❌ No face detected. Try another image.")
+        st.error("No face detected. Try another image.")
     else:
-        raw_symmetry = calculate_symmetry_score(landmarks, width)
-        final_score = normalize_score(raw_symmetry)
+        raw = symmetry_raw_score(landmarks, width)
+        score = normalize(raw)
 
-        st.success(f"✨ Your Facial Symmetry Score: **{final_score}/100**")
+        st.success(f"✨ Your Facial Symmetry Score: **{score}/100**")
 
-        # -------------------------------------------------
-        # Matching Section
-        # -------------------------------------------------
         st.subheader("💞 Potential Matches")
-
-        matches = find_matches(final_score, USER_DATABASE)
+        matches = {
+            name: s for name, s in USER_DB.items()
+            if abs(s - score) <= 3
+        }
 
         if matches:
-            for name, score in matches.items():
-                st.write(f"**{name}** — Symmetry Score: {score}/100")
+            for name, s in matches.items():
+                st.write(f"**{name}** — Symmetry {s}/100")
         else:
-            st.write("No close matches found yet.")
+            st.write("No close matches yet.")
 
-# -------------------------------------------------
-# Footer / Ethics
-# -------------------------------------------------
 st.markdown("---")
 st.caption(
     "⚠️ This app is experimental. Facial symmetry is only one small factor "
-    "in human attraction and should not be used as a measure of personal worth."
+    "in human attraction."
 )
