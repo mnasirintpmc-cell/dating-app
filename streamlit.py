@@ -1,46 +1,76 @@
-# 💘 SymmetryMatch
+import streamlit as st
+import numpy as np
+from PIL import Image, ImageOps
 
-SymmetryMatch is an experimental dating app prototype built with Streamlit.
-It estimates facial symmetry from a user-uploaded image and matches users with
-others who have similar symmetry scores.
+st.set_page_config(
+    page_title="SymmetryMatch",
+    page_icon="💘",
+    layout="centered"
+)
 
-This project is for educational and exploratory purposes only.
+st.title("SymmetryMatch")
+st.caption("Experimental dating app using facial symmetry")
 
----
+def calculate_image_symmetry(image):
+    """
+    Calculate symmetry by comparing left half of the image
+    with the mirrored right half.
+    """
+    gray = ImageOps.grayscale(image)
+    img = np.array(gray).astype(np.float32)
 
-## Features
+    height, width = img.shape
+    mid = width // 2
 
-- Image-based symmetry analysis
-- 0–100 normalized symmetry score
-- Matching with users of similar scores
-- No data storage
-- No external services
+    left = img[:, :mid]
+    right = img[:, width - mid:]
+    right_flipped = np.fliplr(right)
 
----
+    diff = np.abs(left - right_flipped)
+    return diff.mean()
 
-## Tech Stack
+def normalize_score(raw_score):
+    score = 100 - (raw_score / 2)
+    return round(max(0, min(score, 100)), 1)
 
-- Python
-- Streamlit
-- NumPy
-- Pillow
+USER_DATABASE = {
+    "Alex": 82.3,
+    "Jamie": 79.9,
+    "Sam": 85.1,
+    "Morgan": 83.0,
+    "Taylor": 60.4,
+    "Jordan": 77.2
+}
 
----
+uploaded_file = st.file_uploader(
+    "Upload a clear, front-facing photo",
+    type=["jpg", "jpeg", "png"]
+)
 
-## Privacy
+if uploaded_file:
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, width=300)
 
-- Images are processed in memory only
-- No images or personal data are stored
+    with st.spinner("Analyzing symmetry..."):
+        raw = calculate_image_symmetry(image)
+        score = normalize_score(raw)
 
----
+    st.success(f"Your symmetry score: {score} / 100")
 
-## Disclaimer
+    st.subheader("Potential matches")
+    matches = {
+        name: s for name, s in USER_DATABASE.items()
+        if abs(s - score) <= 3
+    }
 
-Facial symmetry is only one small factor in attraction.
-This app does not measure beauty or personal value.
+    if matches:
+        for name, s in matches.items():
+            st.write(f"{name} — score {s}")
+    else:
+        st.write("No close matches found.")
 
----
-
-## License
-
-MIT License
+st.markdown("---")
+st.caption(
+    "This app is experimental. Symmetry is only one small factor "
+    "in human attraction."
+)
